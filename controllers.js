@@ -6,7 +6,11 @@ const members = []; // Array of { id, name }
 const currentWeekPayments = {};
 const payoutHistory = [];
 
-members.push();
+members.push(
+  { id: "1", name: "Ama" },
+  { id: "2", name: "Kofi" },
+  { id: "3", name: "Esi" },
+);
 
 exports.addMember = (req, res) => {
   try {
@@ -34,6 +38,47 @@ exports.addMember = (req, res) => {
     res
       .status(201)
       .json({ message: `Member ${cleanedName} added successfully.` });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+};
+
+exports.recordPayment = (req, res) => {
+  try {
+    const { memberId, amount } = req.body;
+    const targetId = String(memberId || "").trim();
+    const parsedAmount = parseFloat(amount);
+
+    if (isNaN(parsedAmount) || parsedAmount <= 0) {
+      return res
+        .status(400)
+        .json({ error: "Payment amount must be a number greater than zero." });
+    }
+
+    const member = members.find(
+      (m) => m.id.toLowerCase() === targetId.toLowerCase(),
+    );
+    if (!member) {
+      return res
+        .status(400)
+        .json({ error: `Member with ID '${memberId}' not found.` });
+    }
+
+    isStarted = true; // Lock roster upon first active payment activity
+
+    const amountPesewas = Math.round(parsedAmount * 100);
+    const alreadyPaid = currentWeekPayments[member.id];
+    const remainingOwed = weeklyContributionPesewas - alreadyPaid;
+
+    if (amountPesewas > remainingOwed) {
+      const remainingGhs = (remainingOwed / 100).toFixed(2);
+      return res.status(400).json({
+        error: `Overpayment rejected. Member owes ${remainingGhs} GHS.`,
+      });
+    }
+
+    currentWeekPayments[member.id] += amountPesewas;
+    res.status(200).json({ message: "Payment recorded successfully." });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
