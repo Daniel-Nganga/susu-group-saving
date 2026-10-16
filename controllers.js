@@ -83,3 +83,74 @@ exports.recordPayment = (req, res) => {
     res.status(500).json({ error: err.message });
   }
 };
+exports.closeWeek = (req, res) => {
+  try {
+    if (members.length === 0) {
+      return res
+        .status(400)
+        .json({ error: "Cannot close week. No members in the group." });
+    }
+
+    const debtors = [];
+    for (const member of members) {
+      const paid = currentWeekPayments[member.id];
+      if (paid < weeklyContributionPesewas) {
+        const owedGhs = ((weeklyContributionPesewas - paid) / 100).toFixed(2);
+        debtors.push({ name: member.name, id: member.id, owesGhs: owedGhs });
+      }
+    }
+
+    if (debtors.length > 0) {
+      return res.status(400).json({
+        error: `Outstanding debts exist for Week ${currentWeek}`,
+        debtors,
+      });
+    }
+
+    // Sequential pot distribution matching arrival indexing order
+    const recipientIndex = (currentWeek - 1) % members.length;
+    const recipient = members[recipientIndex];
+    const totalPotGhs = (
+      (weeklyContributionPesewas * members.length) /
+      100
+    ).toFixed(2);
+
+    payoutHistory.push({
+      weekNumber: currentWeek,
+      memberName: recipient.name,
+      amountGhs: totalPotGhs,
+    });
+
+    const msg = `Week ${currentWeek} closed successfully! Pot of ${totalPotGhs} GHS paid to ${recipient.name}.`;
+
+    // Advance cycle states
+    currentWeek++;
+    for (const member of members) {
+      currentWeekPayments[member.id] = 0;
+    }
+
+    res.status(200).json({ message: msg });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+};
+exports.getReport = (req, res) => {
+  const memberStatuses = members.map((member) => {
+    const paidPesewas = currentWeekPayments[member.id];
+    const owedPesewas = weeklyContributionPesewas - paidPesewas;
+    return {
+      id: member.id,
+      name: member.name,
+      paidGhs: (paidPesewas / 100).toFixed(2),
+      owesGhs: (owedPesewas / 100).toFixed(2),
+      isPaidInFull: owedPesewas === 0,
+    };
+  });
+
+  res.status(200).json({
+    currentWeek: currentWeek,
+    weeklyContributionGhs: (weeklyContributionPesewas / 100).toFixed(2),
+    memberStatuses,
+    payoutHistory: payoutHistory,
+  });
+};
